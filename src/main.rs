@@ -86,10 +86,11 @@ fn main() {
         Palette::default()
     };
 
-    let separator_chars = std::env::var("ENVY_SEP")
-        .unwrap_or_else(|_| if cfg!(windows) { ":;," } else { ":," }.to_owned());
-    let separator_chars = regex::escape(&separator_chars);
-    let separator_re = Regex::new(&format!("([^{separator_chars}]+)([{separator_chars}]*)"))
+    let separator_chars = regex::escape(
+        &std::env::var("ENVY_SEP")
+            .unwrap_or_else(|_| if cfg!(windows) { ":;," } else { ":," }.to_owned()),
+    );
+    let separator_re = Regex::new(&format!("([^{separator_chars}]*)([{separator_chars}]*)"))
         .expect("Invalid ENVY_SEP");
 
     // Filter and print the environment variables that match the regex pattern
