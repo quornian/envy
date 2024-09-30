@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 regex = "1.5.4"
 clap = { version = "4.5.18", features = ["derive"] }
+glob-match = "0.2.1"

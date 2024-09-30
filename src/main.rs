@@ -1,6 +1,7 @@
 use std::{collections::HashMap, io::IsTerminal};
 
 use clap::{builder::EnumValueParser, Arg, ArgAction, ColorChoice, Command};
+use glob_match::glob_match;
 use regex::{Regex, RegexBuilder};
 
 #[derive(Default)]
@@ -28,6 +29,26 @@ const SPECIALS: &[(char, &'static str)] = &[
     ('\x07', "\\x07"),
 ];
 
+enum Match<'a> {
+    Regex(Regex),
+    Glob(&'a str),
+}
+
+impl Match<'_> {
+    fn matches(&self, haystack: &str) -> bool {
+        match self {
+            Match::Regex(re) => re.is_match(haystack),
+            Match::Glob(glob) => glob_match(glob, haystack),
+        }
+    }
+}
+
+impl From<Regex> for Match<'_> {
+    fn from(value: Regex) -> Self {
+        Match::Regex(value)
+    }
+}
+
 fn main() {
     // Set up the command line arguments
     let cmd = Command::new("Envy")
@@ -42,14 +63,16 @@ fn main() {
                 .help("Treat PATTERN as a regular expression to match against names"),
         )
         .arg(Arg::new("pattern").help(
-            "The name of the environment variable to show (use -r to switch to regular expressions)",
+            "The name of the environment variable to show or a \
+            glob-like pattern (use -r to switch to regular expressions)",
         ))
         .arg(
             Arg::new("case_insensitive")
                 .short('i')
                 .long("ignore-case")
                 .action(ArgAction::SetTrue)
-                .help("Make pattern matching insensitive to case"),
+                .requires("use_regex")
+                .help("Make regular expression matching case insensitive"),
         )
         .arg(
             Arg::new("color")
@@ -67,22 +90,18 @@ fn main() {
     // Parse arguments
     let matches = cmd.get_matches();
     let case_insensitive = matches.get_flag("case_insensitive");
+    let pattern = matches.get_one::<String>("pattern").map(String::as_str);
     let pattern = if matches.get_flag("use_regex") {
-        RegexBuilder::new(matches.get_one::<String>("pattern").unwrap())
+        RegexBuilder::new(pattern.unwrap_or(""))
             .case_insensitive(case_insensitive)
             .build()
             .unwrap_or_else(|e| {
                 eprintln!("Invalid pattern: {e}");
                 std::process::exit(1);
             })
+            .into()
     } else {
-        RegexBuilder::new(&format!(
-            "^(?:{})$",
-            regex::escape(matches.get_one::<String>("pattern").unwrap())
-        ))
-        .case_insensitive(case_insensitive)
-        .build()
-        .unwrap()
+        Match::Glob(pattern.unwrap_or("*"))
     };
     let use_color = match matches.get_one::<ColorChoice>("color").unwrap() {
         ColorChoice::Always => true,
@@ -136,7 +155,7 @@ fn main() {
 
     // Filter and print the environment variables that match the regex pattern
     let mut variables: Vec<_> = std::env::vars()
-        .filter(|(key, _v)| pattern.is_match(&key))
+        .filter(|(key, _v)| pattern.matches(&key))
         .collect();
     variables.sort();
     let variables = variables;
