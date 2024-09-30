@@ -8,6 +8,7 @@ use regex::{Regex, RegexBuilder};
 struct Palette<'a> {
     variable: &'a str,
     value: &'a str,
+    sought: &'a str,
     special: &'a str,
     separator: &'a str,
     reset: &'a str,
@@ -16,6 +17,7 @@ struct Palette<'a> {
 const DEFAULT_COLORS: Palette<'_> = Palette {
     variable: "1",
     value: "",
+    sought: "4",
     special: "36",
     separator: "38;5;242",
     reset: "0",
@@ -29,23 +31,24 @@ const SPECIALS: &[(char, &'static str)] = &[
     ('\x07', "\\x07"),
 ];
 
-enum Match<'a> {
+#[derive(Debug)]
+enum Pattern<'a> {
     Regex(Regex),
     Glob(&'a str),
 }
 
-impl Match<'_> {
+impl Pattern<'_> {
     fn matches(&self, haystack: &str) -> bool {
         match self {
-            Match::Regex(re) => re.is_match(haystack),
-            Match::Glob(glob) => glob_match(glob, haystack),
+            Pattern::Regex(re) => re.is_match(haystack),
+            Pattern::Glob(glob) => glob_match(glob, haystack),
         }
     }
 }
 
-impl From<Regex> for Match<'_> {
+impl From<Regex> for Pattern<'_> {
     fn from(value: Regex) -> Self {
-        Match::Regex(value)
+        Pattern::Regex(value)
     }
 }
 
@@ -67,7 +70,14 @@ fn main() {
             glob-like pattern (use -r to switch to regular expressions)",
         ))
         .arg(
-            Arg::new("case_insensitive")
+            Arg::new("search")
+                .short('s')
+                .long("search")
+                .value_name("regex")
+                .help("Search the environment variable *values* for the given pattern"),
+        )
+        .arg(
+            Arg::new("ignore_case")
                 .short('i')
                 .long("ignore-case")
                 .action(ArgAction::SetTrue)
@@ -89,11 +99,11 @@ fn main() {
 
     // Parse arguments
     let matches = cmd.get_matches();
-    let case_insensitive = matches.get_flag("case_insensitive");
+    let ignore_case = matches.get_flag("ignore_case");
     let pattern = matches.get_one::<String>("pattern").map(String::as_str);
     let pattern = if matches.get_flag("use_regex") {
         RegexBuilder::new(pattern.unwrap_or(""))
-            .case_insensitive(case_insensitive)
+            .case_insensitive(ignore_case)
             .build()
             .unwrap_or_else(|e| {
                 eprintln!("Invalid pattern: {e}");
@@ -101,8 +111,17 @@ fn main() {
             })
             .into()
     } else {
-        Match::Glob(pattern.unwrap_or("*"))
+        Pattern::Glob(pattern.unwrap_or("*"))
     };
+    let value_search = matches.get_one::<String>("search").map(|search| {
+        RegexBuilder::new(search)
+            .case_insensitive(ignore_case)
+            .build()
+            .unwrap_or_else(|e| {
+                eprintln!("Invalid pattern: {e}");
+                std::process::exit(1);
+            })
+    });
     let use_color = match matches.get_one::<ColorChoice>("color").unwrap() {
         ColorChoice::Always => true,
         ColorChoice::Never => false,
@@ -136,6 +155,7 @@ fn main() {
         Palette {
             variable: &var_or("var", DEFAULT_COLORS.variable),
             value: &var_or("val", DEFAULT_COLORS.value),
+            sought: &var_or("sou", DEFAULT_COLORS.sought),
             special: &var_or("spe", DEFAULT_COLORS.special),
             separator: &var_or("sep", DEFAULT_COLORS.separator),
             reset: &format!("\x1b[{}m", DEFAULT_COLORS.reset),
@@ -155,24 +175,31 @@ fn main() {
 
     // Filter and print the environment variables that match the regex pattern
     let mut variables: Vec<_> = std::env::vars()
-        .filter(|(key, _v)| pattern.matches(&key))
+        .filter(|(key, value)| {
+            pattern.matches(&key)
+                && value_search
+                    .as_ref()
+                    .map(|search| search.is_match(value))
+                    .unwrap_or_default()
+        })
         .collect();
     variables.sort();
     let variables = variables;
     let Palette {
-        variable,
-        value,
-        special,
-        separator,
-        reset,
+        variable: p_var,
+        value: p_val,
+        sought: p_sou,
+        special: p_spe,
+        separator: p_sep,
+        reset: p_res,
     } = palette;
 
     for (env_key, mut env_value) in variables.into_iter() {
-        println!("{variable}{env_key}{reset}{separator}={reset}");
+        println!("{p_var}{env_key}{p_res}{p_sep}={p_res}");
         for &(ch, repl) in SPECIALS.iter() {
             // Replace always allocates a new string, so check first
             if env_value.contains(ch) {
-                env_value = env_value.replace(ch, &format!("{special}{repl}{reset}"));
+                env_value = env_value.replace(ch, &format!("{p_spe}{repl}{p_res}"));
             }
         }
 
@@ -180,7 +207,11 @@ fn main() {
         if !parts.is_empty() {
             for env_part in parts {
                 let (_, [x, y]) = env_part.extract();
-                println!("  {value}{x}{reset}{separator}{y}{reset}");
+                let (sym, style) = match value_search.as_ref() {
+                    Some(search) if search.is_match(x) => ('*', p_sou),
+                    _ => (' ', p_val),
+                };
+                println!("{sym} {style}{x}{p_res}{p_sep}{y}{p_res}");
             }
         }
         println!();
@@ -236,12 +267,13 @@ impl EnvHelp for Command {
                 let Palette {
                     variable,
                     value,
+                    sought,
                     special,
                     separator,
                     reset: _,
                 } = DEFAULT_COLORS;
                 hi(&format!(
-                    "var={variable}:val={value}:spe={special}:sep={separator}"
+                    "var={variable}:val={value}:sou={sought}:spe={special}:sep={separator}"
                 ))
             }
         );
