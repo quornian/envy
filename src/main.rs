@@ -29,86 +29,40 @@ const SPECIALS: &[(char, &'static str)] = &[
 ];
 
 fn main() {
-    let cmd =
-        Command::new("Envy")
-            .version("1.0")
-            .author("Ian Thompson <quornian@gmail.com>")
-            .about("Prints environment variables matching a given regular expression")
-            .arg(
-                Arg::new("use_regex")
-                    .short('r')
-                    .long("regex")
-                    .action(ArgAction::SetTrue)
-                    .help("Treat the NAME as a regular expression to match against variable names"),
-            )
-            .arg(Arg::new("pattern").value_name("NAME").help(
-                "An environment variable name to show (use -r to match a regular expression)",
-            ))
-            .arg(
-                Arg::new("case_insensitive")
-                    .short('i')
-                    .long("ignore-case")
-                    .action(ArgAction::SetTrue)
-                    .help("Make pattern matching insensitive to case"),
-            )
-            .arg(
-                Arg::new("color")
-                    .long("color")
-                    .value_name("when")
-                    .help("Colorize output")
-                    .value_parser(EnumValueParser::<ColorChoice>::new())
-                    .num_args(0..=1)
-                    .require_equals(true)
-                    .default_missing_value("always")
-                    .default_value("auto"),
-            );
-    let after_help = {
-        let hdr = cmd.get_styles().get_header();
-        let (hdr, hdr_reset) = (hdr.render(), hdr.render_reset());
-        let lit = cmd.get_styles().get_literal();
-        let (lit, lit_reset) = (lit.render(), lit.render_reset());
-        format!(
-        "{hdr}Environment:{hdr_reset}\n  {lit}ENVY_COLORS{lit_reset}  Override colors for different elements of the output.\n"
-    )
-    };
-    let after_long_help = {
-        let hi = if std::io::stdout().is_terminal() {
-            |s: &str| {
-                Regex::new("([0-9;]+)")
-                    .unwrap()
-                    .replace_all(&s, "\x1b[${1}m${1}\x1b[m")
-                    .into_owned()
-            }
-        } else {
-            |s: &str| s.to_owned()
-        };
-        format!(
-            concat!(
-                "{hdr}Environment:{rst}\n",
-                "  {lit}ENVY_COLORS{rst}{cur}\n",
-                "          Overrides the default colors used to display different elements of the output:\n",
-                "            <{lit}var{rst}>iable  - environment variable names\n",
-                "            <{lit}val{rst}>ue     - environment variable values\n",
-                "            <{lit}spe{rst}>cial   - special characters\n",
-                "            <{lit}sep{rst}>arator - separator characters\n",
-                "          \n",
-                "          Color settings are colon-separated, key-value pairs in key=value form.\n",
-                "          Values are ANSI color codes (31 is foreground red, etc.)\n",
-                "          \n",
-                "          [default: {def}]",
-            ),
-            hdr = cmd.get_styles().get_header(),
-            lit = cmd.get_styles().get_literal(),
-            rst = cmd.get_styles().get_header().render_reset(),
-            cur = if let Ok(cur) = std::env::var("ENVY_COLORS") {
-                format!(" = {}", hi(&cur))
-            } else {
-                String::new()
-            },
-            def = hi("var=1:val=:spe=36:sep=38;5;242")
+    // Set up the command line arguments
+    let cmd = Command::new("Envy")
+        .version("1.0")
+        .author("Ian Thompson <quornian@gmail.com>")
+        .about("Prints environment variables matching a given regular expression")
+        .arg(
+            Arg::new("use_regex")
+                .short('r')
+                .long("regex")
+                .action(ArgAction::SetTrue)
+                .help("Treat PATTERN as a regular expression to match against names"),
         )
-    };
-    let cmd = cmd.after_help(after_help).after_long_help(after_long_help);
+        .arg(Arg::new("pattern").help(
+            "The name of the environment variable to show (use -r to switch to regular expressions)",
+        ))
+        .arg(
+            Arg::new("case_insensitive")
+                .short('i')
+                .long("ignore-case")
+                .action(ArgAction::SetTrue)
+                .help("Make pattern matching insensitive to case"),
+        )
+        .arg(
+            Arg::new("color")
+                .long("color")
+                .value_name("when")
+                .help("Colorize output")
+                .value_parser(EnumValueParser::<ColorChoice>::new())
+                .num_args(0..=1)
+                .require_equals(true)
+                .default_missing_value("always")
+                .default_value("auto"),
+        )
+        .env_help();
 
     // Parse arguments
     let matches = cmd.get_matches();
@@ -211,5 +165,67 @@ fn main() {
             }
         }
         println!();
+    }
+}
+
+trait EnvHelp {
+    fn env_help(self) -> Self;
+}
+
+impl EnvHelp for Command {
+    fn env_help(self) -> Self {
+        // Add additional help for the environment variable ENVY_COLORS
+        let hdr = self.get_styles().get_header();
+        let (hdr, hdr_reset) = (hdr.render(), hdr.render_reset());
+        let lit = self.get_styles().get_literal();
+        let (lit, lit_reset) = (lit.render(), lit.render_reset());
+        let after_help = format!(
+            "{hdr}Environment:{hdr_reset}\
+            \n  {lit}ENVY_COLORS{lit_reset}  \
+            Override colors for different elements of the output.\n"
+        );
+        let hi = if std::io::stdout().is_terminal() {
+            |s: &str| {
+                Regex::new("([0-9;]+)")
+                    .unwrap()
+                    .replace_all(&s, "\x1b[${1}m${1}\x1b[m")
+                    .into_owned()
+            }
+        } else {
+            |s: &str| s.to_owned()
+        };
+        let after_long_help = format!(
+            "{hdr}Environment:{hdr_reset}\
+                \n  {lit}ENVY_COLORS{lit_reset}{cur}\
+                \n          Overrides the default colors used to display different elements of \
+                            the output:\
+                \n            <{lit}var{lit_reset}>iable  - environment variable names\
+                \n            <{lit}val{lit_reset}>ue     - environment variable values\
+                \n            <{lit}spe{lit_reset}>cial   - special characters\
+                \n            <{lit}sep{lit_reset}>arator - separator characters\
+                \n          \
+                \n          Color settings are colon-separated, key-value pairs in key=value form.\
+                \n          Values are ANSI color codes (31 is foreground red, etc.)\
+                \n          \
+                \n          [default: {def}]",
+            cur = if let Ok(cur) = std::env::var("ENVY_COLORS") {
+                format!(" = {}", hi(&cur))
+            } else {
+                String::new()
+            },
+            def = {
+                let Palette {
+                    variable,
+                    value,
+                    special,
+                    separator,
+                    reset: _,
+                } = DEFAULT_COLORS;
+                hi(&format!(
+                    "var={variable}:val={value}:spe={special}:sep={separator}"
+                ))
+            }
+        );
+        self.after_help(after_help).after_long_help(after_long_help)
     }
 }
