@@ -1,7 +1,7 @@
 use std::{collections::HashMap, io::IsTerminal};
 
-use clap::{Arg, ArgGroup, Command};
-use regex::Regex;
+use clap::{builder::EnumValueParser, Arg, ArgAction, ColorChoice, Command};
+use regex::{Regex, RegexBuilder};
 
 #[derive(Default)]
 struct Palette<'a> {
@@ -29,50 +29,48 @@ const SPECIALS: &[(char, &'static str)] = &[
 ];
 
 fn main() {
-    let cmd = Command::new("Envy")
-        .version("1.0")
-        .author("Ian Thompson <quornian@gmail.com>")
-        .about("Prints environment variables matching a given regular expression")
-        .arg(
-            Arg::new("fixed_pattern")
-                .value_name("NAME")
-                .help("An environment variable name")
-                .index(1),
-        )
-        .arg(
-            Arg::new("regex_pattern")
-                .short('r')
-                // .long("regex")
-                .hide_long_help(true)
-                .value_name("PATTERN")
-                .help("Regular expression pattern to match against environment variable names")
-                .default_value(".*"),
-        )
-        .group(
-            ArgGroup::new("pattern")
-                .arg("fixed_pattern")
-                .arg("regex_pattern")
-                .required(true),
-        )
-        .arg(
-            Arg::new("color")
-                .short('c')
-                .long("color")
-                .value_name("WHEN")
-                .help("Colorize output")
-                .value_names(&["never", "always", "auto"])
-                .default_missing_value("always")
-                .default_value("auto"),
-        );
-    let after_help = format!(
-        concat!(
-            "{hdr}Environment:{rst}\n",
-            "  {lit}ENVY_COLORS{rst}  Override colors for different elements of the output.\n",
-        ),
-        hdr = cmd.get_styles().get_header(),
-        lit = cmd.get_styles().get_literal(),
-        rst = cmd.get_styles().get_header().render_reset(),
-    );
+    let cmd =
+        Command::new("Envy")
+            .version("1.0")
+            .author("Ian Thompson <quornian@gmail.com>")
+            .about("Prints environment variables matching a given regular expression")
+            .arg(
+                Arg::new("use_regex")
+                    .short('r')
+                    .long("regex")
+                    .action(ArgAction::SetTrue)
+                    .help("Treat the NAME as a regular expression to match against variable names"),
+            )
+            .arg(Arg::new("pattern").value_name("NAME").help(
+                "An environment variable name to show (use -r to match a regular expression)",
+            ))
+            .arg(
+                Arg::new("case_insensitive")
+                    .short('i')
+                    .long("ignore-case")
+                    .action(ArgAction::SetTrue)
+                    .help("Make pattern matching insensitive to case"),
+            )
+            .arg(
+                Arg::new("color")
+                    .long("color")
+                    .value_name("when")
+                    .help("Colorize output")
+                    .value_parser(EnumValueParser::<ColorChoice>::new())
+                    .num_args(0..=1)
+                    .require_equals(true)
+                    .default_missing_value("always")
+                    .default_value("auto"),
+            );
+    let after_help = {
+        let hdr = cmd.get_styles().get_header();
+        let (hdr, hdr_reset) = (hdr.render(), hdr.render_reset());
+        let lit = cmd.get_styles().get_literal();
+        let (lit, lit_reset) = (lit.render(), lit.render_reset());
+        format!(
+        "{hdr}Environment:{hdr_reset}\n  {lit}ENVY_COLORS{lit_reset}  Override colors for different elements of the output.\n"
+    )
+    };
     let after_long_help = {
         let hi = if std::io::stdout().is_terminal() {
             |s: &str| {
@@ -111,39 +109,51 @@ fn main() {
         )
     };
     let cmd = cmd.after_help(after_help).after_long_help(after_long_help);
+
+    // Parse arguments
     let matches = cmd.get_matches();
-    let pattern = matches
-        .get_one::<String>("fixed_pattern")
-        .map(|fixed| Regex::new(&format!("^(?:{})$", regex::escape(fixed))).unwrap())
-        .unwrap_or_else(|| {
-            Regex::new(matches.get_one::<String>("regex_pattern").unwrap()).unwrap_or_else(|e| {
+    let case_insensitive = matches.get_flag("case_insensitive");
+    let pattern = if matches.get_flag("use_regex") {
+        RegexBuilder::new(matches.get_one::<String>("pattern").unwrap())
+            .case_insensitive(case_insensitive)
+            .build()
+            .unwrap_or_else(|e| {
                 eprintln!("Invalid pattern: {e}");
                 std::process::exit(1);
             })
-        });
+    } else {
+        RegexBuilder::new(&format!(
+            "^(?:{})$",
+            regex::escape(matches.get_one::<String>("pattern").unwrap())
+        ))
+        .case_insensitive(case_insensitive)
+        .build()
+        .unwrap()
+    };
+    let use_color = match matches.get_one::<ColorChoice>("color").unwrap() {
+        ColorChoice::Always => true,
+        ColorChoice::Never => false,
+        ColorChoice::Auto => std::io::stdout().is_terminal(),
+    };
 
-    let color_arg = matches.get_one::<String>("color").unwrap();
-
-    let env_color_re = Regex::new("^(var|val|spe|sep)=([0-9;]*)$").unwrap();
-    let colors_from_env: HashMap<_, _> = std::env::var("ENVY_COLORS")
-        .map(|value| {
-            value
-                .split(':')
-                .filter_map(|part| {
-                    env_color_re.captures(part).map(|captures| {
-                        let (_, [key, value]) = captures.extract();
-                        (key.to_owned(), value.to_owned())
+    // Set up color palette from command line and environment
+    let colors_from_env: HashMap<_, _> = {
+        std::env::var("ENVY_COLORS")
+            .map(|value| {
+                let env_color_re = Regex::new("^(var|val|spe|sep)=([0-9;]*)$").unwrap();
+                value
+                    .split(':')
+                    .filter_map(|part| {
+                        env_color_re.captures(part).map(|captures| {
+                            let (_, [key, value]) = captures.extract();
+                            (key.to_owned(), value.to_owned())
+                        })
                     })
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-
-    let palette = if match color_arg.as_str() {
-        "always" => true,
-        "never" => false,
-        _auto => std::io::stdout().is_terminal(),
-    } {
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let palette = if use_color {
         let var_or = |var, def| {
             format!(
                 "\x1b[{}m",
@@ -161,12 +171,14 @@ fn main() {
         Palette::default()
     };
 
-    let separator_chars = regex::escape(
-        &std::env::var("ENVY_SEP")
-            .unwrap_or_else(|_| if cfg!(windows) { ":;," } else { ":," }.to_owned()),
-    );
-    let separator_re = Regex::new(&format!("([^{separator_chars}]*)([{separator_chars}]*)"))
-        .expect("Invalid ENVY_SEP");
+    let separator_re = {
+        let separator_chars = regex::escape(
+            &std::env::var("ENVY_SEP")
+                .unwrap_or_else(|_| if cfg!(windows) { ":;," } else { ":," }.to_owned()),
+        );
+        Regex::new(&format!("([^{separator_chars}]*)([{separator_chars}]*)"))
+            .expect("Invalid ENVY_SEP")
+    };
 
     // Filter and print the environment variables that match the regex pattern
     let mut variables: Vec<_> = std::env::vars()
