@@ -8,8 +8,8 @@ use regex::{Regex, RegexBuilder};
 struct Palette<'a> {
     variable: &'a str,
     value: &'a str,
-    sought: &'a str,
-    ignored: &'a str,
+    matched: &'a str,
+    unmatched: &'a str,
     special: &'a str,
     separator: &'a str,
     reset: &'a str,
@@ -18,10 +18,10 @@ struct Palette<'a> {
 const DEFAULT_COLORS: Palette<'_> = Palette {
     variable: "1",
     value: "",
-    sought: "4;97",
-    ignored: "90",
+    matched: "4;97",
+    unmatched: "90",
     special: "36",
-    separator: "38;5;242",
+    separator: "90",
     reset: "0",
 };
 
@@ -157,8 +157,8 @@ fn main() {
         Palette {
             variable: &var_or("var", DEFAULT_COLORS.variable),
             value: &var_or("val", DEFAULT_COLORS.value),
-            sought: &var_or("sou", DEFAULT_COLORS.sought),
-            ignored: &var_or("ign", DEFAULT_COLORS.ignored),
+            matched: &var_or("mat", DEFAULT_COLORS.matched),
+            unmatched: &var_or("unm", DEFAULT_COLORS.unmatched),
             special: &var_or("spe", DEFAULT_COLORS.special),
             separator: &var_or("sep", DEFAULT_COLORS.separator),
             reset: &format!("\x1b[{}m", DEFAULT_COLORS.reset),
@@ -185,8 +185,8 @@ fn main() {
     let Palette {
         variable: p_var,
         value: p_val,
-        sought: p_sou,
-        ignored: p_ign,
+        matched: p_mat,
+        unmatched: p_unm,
         special: p_spe,
         separator: p_sep,
         reset: p_res,
@@ -200,11 +200,8 @@ fn main() {
             .captures_iter(&env_value)
             .map(|capture| {
                 let (_, [part, sep]) = capture.extract();
-                let part_matched = value_search
-                    .as_ref()
-                    .map(|search| search.is_match(part))
-                    .unwrap_or_default();
-                any_match = any_match || part_matched;
+                let part_matched = value_search.as_ref().map(|search| search.is_match(part));
+                any_match = any_match || part_matched.unwrap_or_default();
 
                 // Pre-format special character replacements here
                 let mut part = Cow::from(part);
@@ -220,7 +217,7 @@ fn main() {
 
                 // Highlight match
                 if let Some(search) = value_search.as_ref() {
-                    part = match search.replace_all(&part, &format!("{p_sou}$0{p_res}{p_val}")) {
+                    part = match search.replace_all(&part, &format!("{p_mat}$0{p_res}{p_val}")) {
                         Cow::Borrowed(_) => part,
                         Cow::Owned(x) => Cow::Owned(x),
                     };
@@ -234,12 +231,12 @@ fn main() {
 
         println!("{p_var}{env_key}{p_res}{p_sep}={p_res}");
         for (part_matched, part, sep) in parts {
-            let (sym, style) = if part_matched {
-                (found_marker, "")
-            } else {
-                (' ', p_ign)
+            let (marker, style) = match part_matched {
+                Some(true) => (found_marker, ""),
+                Some(false) => (' ', p_unm),
+                None => (' ', ""),
             };
-            println!("{sym} {style}{part}{p_res}{p_sep}{sep}{p_res}");
+            println!("{marker} {style}{part}{p_res}{p_sep}{sep}{p_res}");
         }
 
         println!();
@@ -295,15 +292,15 @@ impl EnvHelp for Command {
                 let Palette {
                     variable,
                     value,
-                    sought,
-                    ignored,
+                    matched,
+                    unmatched,
                     special,
                     separator,
                     reset: _,
                 } = DEFAULT_COLORS;
                 hi(&format!(
-                    "var={variable}:val={value}:sou={sought}:\
-                    ign={ignored}:spe={special}:sep={separator}"
+                    "var={variable}:val={value}:mat={matched}:\
+                    unm={unmatched}:spe={special}:sep={separator}"
                 ))
             }
         );
