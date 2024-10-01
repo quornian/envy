@@ -60,7 +60,7 @@ impl From<Regex> for Pattern<'_> {
 fn main() {
     // Set up the command line arguments
     let cmd = Command::new("Envy")
-        .version("1.0")
+        .version("0.1")
         .author("Ian Thompson <quornian@gmail.com>")
         .about(
             "Formats and displays environment variables for human friendly reading, \
