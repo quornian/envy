@@ -59,24 +59,28 @@ fn main() {
     let cmd = Command::new("Envy")
         .version("1.0")
         .author("Ian Thompson <quornian@gmail.com>")
-        .about("Prints environment variables matching a given regular expression")
+        .about(
+            "Formats and displays environment variables for human friendly reading, \
+            searching and comparison",
+        )
+        .arg(Arg::new("pattern").help(
+            "The name or glob-like pattern of the environment variable(s) to show \
+            (use -r to switch to regular expressions). If omitted, all environment \
+            variables will be displayed",
+        ))
         .arg(
             Arg::new("use_regex")
                 .short('r')
                 .long("regex")
                 .action(ArgAction::SetTrue)
-                .help("Treat PATTERN as a regular expression to match against names"),
+                .help("Treat pattern as a regular expression to match against names"),
         )
-        .arg(Arg::new("pattern").help(
-            "The name of the environment variable to show or a \
-            glob-like pattern (use -r to switch to regular expressions)",
-        ))
         .arg(
             Arg::new("search")
                 .short('s')
                 .long("search")
                 .value_name("regex")
-                .help("Search the environment variable *values* for the given pattern"),
+                .help("Search the values of environment variables for the given pattern"),
         )
         .arg(
             Arg::new("ignore_case")
@@ -84,13 +88,13 @@ fn main() {
                 .long("ignore-case")
                 .action(ArgAction::SetTrue)
                 .requires("use_regex")
-                .help("Make regular expression matching case insensitive"),
+                .help("Make regular expression search and pattern match case insensitive"),
         )
         .arg(
             Arg::new("color")
                 .long("color")
                 .value_name("when")
-                .help("Colorize output")
+                .help("Control when to color the output")
                 .value_parser(EnumValueParser::<ColorChoice>::new())
                 .num_args(0..=1)
                 .require_equals(true)
@@ -194,7 +198,8 @@ fn main() {
     let found_marker = if use_color { ' ' } else { '*' };
 
     for (env_key, env_value) in variables.into_iter() {
-        // Deal with values first so that if we're searching values we can reject the whole key if unmatched
+        // Deal with values first so we can reject the whole entry when a value search
+        // matches none of the values
         let mut any_match = value_search.is_none();
         let parts: Vec<_> = separator_re
             .captures_iter(&env_value)
@@ -215,7 +220,7 @@ fn main() {
                     }
                 }
 
-                // Highlight match
+                // Highlight matched segment
                 if let Some(search) = value_search.as_ref() {
                     part = match search.replace_all(&part, &format!("{p_mat}$0{p_res}{p_val}")) {
                         Cow::Borrowed(_) => part,
