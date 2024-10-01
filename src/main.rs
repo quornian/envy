@@ -33,6 +33,9 @@ const SPECIALS: &[(char, &'static str)] = &[
     ('\x07', "\\x07"),
 ];
 
+const WINDOWS_DEFAULT_SEP: &str = ";,:";
+const UNIX_DEFAULT_SEP: &str = ":,";
+
 #[derive(Debug)]
 enum Pattern<'a> {
     Regex(Regex),
@@ -172,10 +175,14 @@ fn main() {
     };
 
     let separator_re = {
-        let separator_chars = regex::escape(
-            &std::env::var("ENVY_SEP")
-                .unwrap_or_else(|_| if cfg!(windows) { ":;," } else { ":," }.to_owned()),
-        );
+        let separator_chars = regex::escape(&std::env::var("ENVY_SEP").unwrap_or_else(|_| {
+            if cfg!(windows) {
+                WINDOWS_DEFAULT_SEP
+            } else {
+                UNIX_DEFAULT_SEP
+            }
+            .to_owned()
+        }));
         Regex::new(&format!("([^{separator_chars}]*)([{separator_chars}]*)"))
             .expect("Invalid ENVY_SEP")
     };
@@ -276,18 +283,23 @@ impl EnvHelp for Command {
         };
         let after_long_help = format!(
             "{hdr}Environment:{hdr_reset}\
-                \n  {lit}ENVY_COLORS{lit_reset}{cur}\
-                \n          Overrides the default colors used to display different elements of \
-                            the output:\
-                \n            <{lit}var{lit_reset}>iable  - environment variable names\
-                \n            <{lit}val{lit_reset}>ue     - environment variable values\
-                \n            <{lit}spe{lit_reset}>cial   - special characters\
-                \n            <{lit}sep{lit_reset}>arator - separator characters\
-                \n          \
-                \n          Color settings are colon-separated, key-value pairs in key=value form.\
-                \n          Values are ANSI color codes (31 is foreground red, etc.)\
-                \n          \
-                \n          [default: {def}]",
+            \n  {lit}ENVY_COLORS{lit_reset}{cur}\
+            \n          Overrides the default colors used to display different elements of \
+                        the output:\
+            \n            <{lit}var{lit_reset}>iable  - environment variable names\
+            \n            <{lit}val{lit_reset}>ue     - environment variable values\
+            \n            <{lit}spe{lit_reset}>cial   - special characters\
+            \n            <{lit}sep{lit_reset}>arator - separator characters\
+            \n          \
+            \n          Color settings are colon-separated, key-value pairs in key=value form. \
+                        Values are ANSI color codes.\
+            \n          \
+            \n          [default: {def}]\
+            \n\
+            \n  {lit}ENVY_SEP{lit_reset}\
+            \n          Overrides the OS specific path separators, which by default are:\
+            \n          Linux/MacOS:  {lit}ENVY_SEP={UNIX_DEFAULT_SEP}{lit_reset}\
+            \n          Windows:      {lit}ENVY_SEP={WINDOWS_DEFAULT_SEP}{lit_reset}",
             cur = if let Ok(cur) = std::env::var("ENVY_COLORS") {
                 format!(" = {}", hi(&cur))
             } else {

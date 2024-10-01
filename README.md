@@ -57,8 +57,13 @@ Environment:
             <sep>arator - separator characters
 
           Color settings are colon-separated, key-value pairs in
-          key=value form.
-          Values are ANSI color codes (31 is foreground red, etc.)
+          key=value form. Values are ANSI color codes.
 
           [default: var=1:val=:mat=4;97:unm=90:spe=36:sep=90]
+
+  ENVY_SEP
+          Overrides the OS specific path separators, which by
+          default are:
+          Linux/MacOS:  ENVY_SEP=:,
+          Windows:      ENVY_SEP=;,:
 ```
