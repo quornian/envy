@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io::IsTerminal};
+use std::{borrow::Cow, collections::HashMap, io::IsTerminal};
 
 use clap::{builder::EnumValueParser, Arg, ArgAction, ColorChoice, Command};
 use glob_match::glob_match;
@@ -9,6 +9,7 @@ struct Palette<'a> {
     variable: &'a str,
     value: &'a str,
     sought: &'a str,
+    ignored: &'a str,
     special: &'a str,
     separator: &'a str,
     reset: &'a str,
@@ -17,7 +18,8 @@ struct Palette<'a> {
 const DEFAULT_COLORS: Palette<'_> = Palette {
     variable: "1",
     value: "",
-    sought: "4",
+    sought: "4;97",
+    ignored: "90",
     special: "36",
     separator: "38;5;242",
     reset: "0",
@@ -156,6 +158,7 @@ fn main() {
             variable: &var_or("var", DEFAULT_COLORS.variable),
             value: &var_or("val", DEFAULT_COLORS.value),
             sought: &var_or("sou", DEFAULT_COLORS.sought),
+            ignored: &var_or("ign", DEFAULT_COLORS.ignored),
             special: &var_or("spe", DEFAULT_COLORS.special),
             separator: &var_or("sep", DEFAULT_COLORS.separator),
             reset: &format!("\x1b[{}m", DEFAULT_COLORS.reset),
@@ -175,13 +178,7 @@ fn main() {
 
     // Filter and print the environment variables that match the regex pattern
     let mut variables: Vec<_> = std::env::vars()
-        .filter(|(key, value)| {
-            pattern.matches(&key)
-                && value_search
-                    .as_ref()
-                    .map(|search| search.is_match(value))
-                    .unwrap_or_default()
-        })
+        .filter(|(key, _value)| pattern.matches(&key))
         .collect();
     variables.sort();
     let variables = variables;
@@ -189,31 +186,62 @@ fn main() {
         variable: p_var,
         value: p_val,
         sought: p_sou,
+        ignored: p_ign,
         special: p_spe,
         separator: p_sep,
         reset: p_res,
     } = palette;
+    let found_marker = if use_color { ' ' } else { '*' };
 
-    for (env_key, mut env_value) in variables.into_iter() {
+    for (env_key, env_value) in variables.into_iter() {
+        // Deal with values first so that if we're searching values we can reject the whole key if unmatched
+        let mut any_match = value_search.is_none();
+        let parts: Vec<_> = separator_re
+            .captures_iter(&env_value)
+            .map(|capture| {
+                let (_, [part, sep]) = capture.extract();
+                let part_matched = value_search
+                    .as_ref()
+                    .map(|search| search.is_match(part))
+                    .unwrap_or_default();
+                any_match = any_match || part_matched;
+
+                // Pre-format special character replacements here
+                let mut part = Cow::from(part);
+                for &(ch, repl) in SPECIALS.iter() {
+                    // Replace always allocates a new string, so check first
+                    if part.contains(ch) {
+                        part = part
+                            .as_ref()
+                            .replace(ch, &format!("{p_spe}{repl}{p_res}"))
+                            .into();
+                    }
+                }
+
+                // Highlight match
+                if let Some(search) = value_search.as_ref() {
+                    part = match search.replace_all(&part, &format!("{p_sou}$0{p_res}{p_val}")) {
+                        Cow::Borrowed(_) => part,
+                        Cow::Owned(x) => Cow::Owned(x),
+                    };
+                }
+                (part_matched, part, sep)
+            })
+            .collect();
+        if !any_match {
+            continue;
+        }
+
         println!("{p_var}{env_key}{p_res}{p_sep}={p_res}");
-        for &(ch, repl) in SPECIALS.iter() {
-            // Replace always allocates a new string, so check first
-            if env_value.contains(ch) {
-                env_value = env_value.replace(ch, &format!("{p_spe}{repl}{p_res}"));
-            }
+        for (part_matched, part, sep) in parts {
+            let (sym, style) = if part_matched {
+                (found_marker, "")
+            } else {
+                (' ', p_ign)
+            };
+            println!("{sym} {style}{part}{p_res}{p_sep}{sep}{p_res}");
         }
 
-        let parts: Vec<_> = separator_re.captures_iter(&env_value).collect();
-        if !parts.is_empty() {
-            for env_part in parts {
-                let (_, [x, y]) = env_part.extract();
-                let (sym, style) = match value_search.as_ref() {
-                    Some(search) if search.is_match(x) => ('*', p_sou),
-                    _ => (' ', p_val),
-                };
-                println!("{sym} {style}{x}{p_res}{p_sep}{y}{p_res}");
-            }
-        }
         println!();
     }
 }
@@ -268,12 +296,14 @@ impl EnvHelp for Command {
                     variable,
                     value,
                     sought,
+                    ignored,
                     special,
                     separator,
                     reset: _,
                 } = DEFAULT_COLORS;
                 hi(&format!(
-                    "var={variable}:val={value}:sou={sought}:spe={special}:sep={separator}"
+                    "var={variable}:val={value}:sou={sought}:\
+                    ign={ignored}:spe={special}:sep={separator}"
                 ))
             }
         );
