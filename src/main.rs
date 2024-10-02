@@ -10,6 +10,7 @@ struct Palette<'a> {
     value: &'a str,
     matched: &'a str,
     unmatched: &'a str,
+    missing: &'a str,
     special: &'a str,
     separator: &'a str,
     reset: &'a str,
@@ -20,6 +21,7 @@ const DEFAULT_COLORS: Palette<'_> = Palette {
     value: "",
     matched: "4;97",
     unmatched: "90",
+    missing: "2;31",
     special: "36",
     separator: "90",
     reset: "0",
@@ -94,6 +96,13 @@ fn main() {
                 .help("Make regular expression search and pattern match case insensitive"),
         )
         .arg(
+            Arg::new("check_paths")
+                .short('e')
+                .long("exists")
+                .action(ArgAction::SetTrue)
+                .help("Indicate non-existing paths (values containing a path separator)"),
+        )
+        .arg(
             Arg::new("color")
                 .long("color")
                 .value_name("when")
@@ -131,6 +140,7 @@ fn main() {
                 std::process::exit(1);
             })
     });
+    let check_paths = matches.get_flag("check_paths");
     let use_color = match matches.get_one::<ColorChoice>("color").unwrap() {
         ColorChoice::Always => true,
         ColorChoice::Never => false,
@@ -166,6 +176,7 @@ fn main() {
             value: &var_or("val", DEFAULT_COLORS.value),
             matched: &var_or("mat", DEFAULT_COLORS.matched),
             unmatched: &var_or("unm", DEFAULT_COLORS.unmatched),
+            missing: &var_or("mis", DEFAULT_COLORS.missing),
             special: &var_or("spe", DEFAULT_COLORS.special),
             separator: &var_or("sep", DEFAULT_COLORS.separator),
             reset: &format!("\x1b[{}m", DEFAULT_COLORS.reset),
@@ -198,21 +209,27 @@ fn main() {
         value: p_val,
         matched: p_mat,
         unmatched: p_unm,
+        missing: p_mis,
         special: p_spe,
         separator: p_sep,
         reset: p_res,
     } = palette;
-    let found_marker = if use_color { ' ' } else { '*' };
+    let no_marker = ' ';
+    let found_marker = if use_color { no_marker } else { '*' };
+    let missing_marker = if use_color { no_marker } else { '!' };
 
     for (env_key, env_value) in variables.into_iter() {
         // Deal with values first so we can reject the whole entry when a value search
         // matches none of the values
         let mut any_match = value_search.is_none();
+        let has_paths_to_check = check_paths.then(|| env_value.contains(std::path::MAIN_SEPARATOR));
         let parts: Vec<_> = separator_re
             .captures_iter(&env_value)
             .map(|capture| {
                 let (_, [part, sep]) = capture.extract();
                 let part_matched = value_search.as_ref().map(|search| search.is_match(part));
+                let part_missing =
+                    has_paths_to_check.map(|check| check && !std::path::Path::new(part).exists());
                 any_match = any_match || part_matched.unwrap_or_default();
 
                 // Pre-format special character replacements here
@@ -227,14 +244,20 @@ fn main() {
                     }
                 }
 
+                let style = match part_missing {
+                    Some(true) => p_mis,
+                    _ => p_val,
+                };
+
                 // Highlight matched segment
                 if let Some(search) = value_search.as_ref() {
-                    part = match search.replace_all(&part, &format!("{p_mat}$0{p_res}{p_val}")) {
+                    part = match search.replace_all(&part, &format!("{p_mat}$0{p_res}{style}")) {
                         Cow::Borrowed(_) => part,
                         Cow::Owned(x) => Cow::Owned(x),
                     };
                 }
-                (part_matched, part, sep)
+
+                (part_missing, part_matched, part, sep)
             })
             .collect();
         if !any_match {
@@ -242,13 +265,18 @@ fn main() {
         }
 
         println!("{p_var}{env_key}{p_res}{p_sep}={p_res}");
-        for (part_matched, part, sep) in parts {
-            let (marker, style) = match part_matched {
+        for (part_missing, part_matched, part, sep) in parts {
+            let (found, style) = match part_matched {
                 Some(true) => (found_marker, ""),
-                Some(false) => (' ', p_unm),
-                None => (' ', ""),
+                Some(false) => (no_marker, p_unm),
+                None => (no_marker, ""),
             };
-            println!("{marker} {style}{part}{p_res}{p_sep}{sep}{p_res}");
+            let (missing, style) = match part_missing {
+                Some(true) => (missing_marker, p_mis),
+                Some(false) => (no_marker, style),
+                None => (no_marker, style),
+            };
+            println!("{found}{missing}{style}{part}{p_res}{p_sep}{sep}{p_res}");
         }
 
         println!();
@@ -311,13 +339,14 @@ impl EnvHelp for Command {
                     value,
                     matched,
                     unmatched,
+                    missing,
                     special,
                     separator,
                     reset: _,
                 } = DEFAULT_COLORS;
                 hi(&format!(
-                    "var={variable}:val={value}:mat={matched}:\
-                    unm={unmatched}:spe={special}:sep={separator}"
+                    "var={variable}:val={value}:mat={matched}:unm={unmatched}:\
+                    mis={missing}:spe={special}:sep={separator}"
                 ))
             }
         );
