@@ -92,7 +92,6 @@ fn main() {
                 .short('i')
                 .long("ignore-case")
                 .action(ArgAction::SetTrue)
-                .requires("use_regex")
                 .help("Make regular expression search and pattern match case insensitive"),
         )
         .arg(
