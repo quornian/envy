@@ -35,7 +35,7 @@ const SPECIALS: &[(char, &'static str)] = &[
     ('\x07', "\\x07"),
 ];
 
-const WINDOWS_DEFAULT_SEP: &str = ";,:";
+const WINDOWS_DEFAULT_SEP: &str = ";,";
 const UNIX_DEFAULT_SEP: &str = ":,";
 
 #[derive(Debug)]
