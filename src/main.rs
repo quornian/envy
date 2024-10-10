@@ -88,6 +88,17 @@ fn main() {
                 .help("Search the values of environment variables for the given pattern"),
         )
         .arg(
+            Arg::new("only_matching")
+                .short('o')
+                .long("only-matching")
+                .action(ArgAction::SetTrue)
+                .requires("search")
+                .help(
+                    "Display only the portions of values (after splitting) that match the \
+                    regular expression given by --search",
+                ),
+        )
+        .arg(
             Arg::new("ignore_case")
                 .short('i')
                 .long("ignore-case")
@@ -139,6 +150,7 @@ fn main() {
                 std::process::exit(1);
             })
     });
+    let only_matching = matches.get_flag("only_matching");
     let check_paths = matches.get_flag("check_paths");
     let use_color = match matches.get_one::<ColorChoice>("color").unwrap() {
         ColorChoice::Always => true,
@@ -193,7 +205,7 @@ fn main() {
             }
             .to_owned()
         }));
-        Regex::new(&format!("([^{separator_chars}]*)([{separator_chars}]*)"))
+        Regex::new(&format!("([^{separator_chars}]*)([{separator_chars}]|$)"))
             .expect("Invalid ENVY_SEP")
     };
 
@@ -222,9 +234,10 @@ fn main() {
         // matches none of the values
         let mut any_match = value_search.is_none();
         let has_paths_to_check = check_paths.then(|| env_value.contains(std::path::MAIN_SEPARATOR));
+        let mut already_elided = false;
         let parts: Vec<_> = separator_re
             .captures_iter(&env_value)
-            .map(|capture| {
+            .filter_map(|capture| {
                 let (_, [part, sep]) = capture.extract();
                 let part_matched = value_search.as_ref().map(|search| search.is_match(part));
                 let part_missing =
@@ -251,12 +264,27 @@ fn main() {
                 // Highlight matched segment
                 if let Some(search) = value_search.as_ref() {
                     part = match search.replace_all(&part, &format!("{p_mat}$0{p_res}{style}")) {
-                        Cow::Borrowed(_) => part,
-                        Cow::Owned(x) => Cow::Owned(x),
+                        Cow::Borrowed(_) => {
+                            // Replace did nothing, which means no match was found. If we're
+                            // only displaying matches, output a single ellipsis for any set of
+                            // contiguous unmatched lines (using "already_elided" to keep track)
+                            if only_matching {
+                                if already_elided {
+                                    return None;
+                                }
+                                already_elided = true;
+                                return Some((None, Some(false), Cow::from("..."), ""));
+                            }
+                            part
+                        }
+                        Cow::Owned(x) => {
+                            already_elided = false;
+                            Cow::Owned(x)
+                        }
                     };
                 }
 
-                (part_missing, part_matched, part, sep)
+                Some((part_missing, part_matched, part, sep))
             })
             .collect();
         if !any_match {
