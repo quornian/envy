@@ -1,5 +1,5 @@
 [package]
-name = "envy"
+name = "envy-cmd"
 version = "1.0.0"
 description = "A command line tool for displaying environment variables in a human friendly form"
 authors = ["Ian Thompson <quornian@gmail.com>"]
@@ -8,6 +8,11 @@ license = "MIT"
 documentation = "https://quornian.github.io/envy/"
 homepage = "https://quornian.github.io/envy/"
 repository = "https://github.com/quornian/envy"
+default-run = "envy"
+
+[[bin]]
+name = "envy"
+path = "src/main.rs"
 
 [dependencies]
 regex = "1.5.4"
