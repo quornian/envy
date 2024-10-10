@@ -1,0 +1,82 @@
+name: Deploy
+
+on:
+  push:
+    tags:
+      # Regex for a version number such as v0.2.1
+      - "v[0-9]+.[0-9]+.[0-9]+"
+    # branches: ["github-build"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build and upload
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        include:
+          - build: linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - build: macos
+            os: macos-latest
+            target: x86_64-apple-darwin
+          - build: windows-msvc
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - build: windows-gnu
+            os: windows-latest
+            target: x86_64-pc-windows-gnu
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get the release version from the tag
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+
+      - name: Install latest rust toolchain (for MacOS)
+        uses: actions-rs/toolchain@v1
+        if: ${{ matrix.target == 'x86_64-apple-darwin' }}
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+          default: true
+          override: true
+
+      - name: Build
+        run: cargo build --release --verbose --target ${{ matrix.target }}
+
+      - name: Build archive
+        shell: bash
+        run: |
+          # Create archive file...
+          set -eu
+          binary_name="envy"
+
+          dirname="$binary_name-${{ env.VERSION }}-${{ matrix.target }}"
+          mkdir "$dirname"
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            mv "target/${{ matrix.target }}/release/$binary_name.exe" "$dirname"
+          else
+            mv "target/${{ matrix.target }}/release/$binary_name" "$dirname"
+          fi
+          cp README.md LICENSE.md "$dirname"
+
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            7z a "$dirname.zip" "$dirname"
+            echo "ASSET=$dirname.zip" >> $GITHUB_ENV
+          else
+            tar -czf "$dirname.tar.gz" "$dirname"
+            echo "ASSET=$dirname.tar.gz" >> $GITHUB_ENV
+          fi
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.ASSET }}
+          draft: true
