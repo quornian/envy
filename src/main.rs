@@ -4,6 +4,8 @@ use clap::{builder::EnumValueParser, Arg, ArgAction, ColorChoice, Command};
 use glob_match::glob_match;
 use regex::{Regex, RegexBuilder};
 
+const VERSION: &'_ str = "1.0.0";
+
 #[derive(Default)]
 struct Palette<'a> {
     variable: &'a str,
@@ -62,7 +64,7 @@ impl From<Regex> for Pattern<'_> {
 fn main() {
     // Set up the command line arguments
     let cmd = Command::new("Envy")
-        .version("v1.0")
+        .version(VERSION)
         .author("Ian Thompson <quornian@gmail.com>")
         .about(
             "Formats and displays environment variables for human friendly reading, \
