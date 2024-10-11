@@ -5,8 +5,8 @@ description = "A command line tool for displaying environment variables in a hum
 authors = ["Ian Thompson <quornian@gmail.com>"]
 edition = "2021"
 license = "MIT"
-documentation = "https://quornian.github.io/envy/"
-homepage = "https://quornian.github.io/envy/"
+documentation = "https://github.com/quornian/envy/blob/v1.0.1/README.md"
+homepage = "https://github.com/quornian/envy"
 repository = "https://github.com/quornian/envy"
 default-run = "envy"
 

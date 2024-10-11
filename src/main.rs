@@ -68,26 +68,26 @@ fn main() {
         .author("Ian Thompson <quornian@gmail.com>")
         .about(
             "Formats and displays environment variables for human friendly reading, \
-            searching and comparison",
+            searching and comparison.",
         )
         .arg(Arg::new("pattern").help(
             "The name or glob-like pattern of the environment variable(s) to show \
             (use -r to switch to regular expressions). If omitted, all environment \
-            variables will be displayed",
+            variables will be displayed.",
         ))
         .arg(
             Arg::new("use_regex")
                 .short('r')
                 .long("regex")
                 .action(ArgAction::SetTrue)
-                .help("Treat pattern as a regular expression to match against names"),
+                .help("Treat pattern as a regular expression to match against names."),
         )
         .arg(
             Arg::new("search")
                 .short('s')
                 .long("search")
                 .value_name("regex")
-                .help("Search the values of environment variables for the given pattern"),
+                .help("Search the values of environment variables for the given pattern."),
         )
         .arg(
             Arg::new("only_matching")
@@ -96,8 +96,8 @@ fn main() {
                 .action(ArgAction::SetTrue)
                 .requires("search")
                 .help(
-                    "Display only the portions of values (after splitting) that match the \
-                    regular expression given by --search",
+                    "After splitting values, elide unmatched lines and display only those that \
+                    match the regular expression given by --search.",
                 ),
         )
         .arg(
@@ -105,20 +105,20 @@ fn main() {
                 .short('i')
                 .long("ignore-case")
                 .action(ArgAction::SetTrue)
-                .help("Make regular expression search and pattern match case insensitive"),
+                .help("Make regular expression search and pattern match case insensitive."),
         )
         .arg(
             Arg::new("check_paths")
                 .short('e')
                 .long("exists")
                 .action(ArgAction::SetTrue)
-                .help("Indicate non-existing paths (values containing a path separator)"),
+                .help("Indicate any lines that appear to be paths but cannot be found on disk."),
         )
         .arg(
             Arg::new("color")
                 .long("color")
                 .value_name("when")
-                .help("Control when to color the output")
+                .help("Control when to color the output.")
                 .value_parser(EnumValueParser::<ColorChoice>::new())
                 .num_args(0..=1)
                 .require_equals(true)
@@ -341,22 +341,27 @@ impl EnvHelp for Command {
         let after_long_help = format!(
             "{hdr}Environment:{hdr_reset}\
             \n  {lit}ENVY_COLORS{lit_reset}{cur}\
-            \n          Overrides the default colors used to display different elements of \
+            \n          Override the default colors used to display different elements of \
                         the output:\
-            \n            <{lit}var{lit_reset}>iable  - environment variable names\
-            \n            <{lit}val{lit_reset}>ue     - environment variable values\
-            \n            <{lit}spe{lit_reset}>cial   - special characters\
-            \n            <{lit}sep{lit_reset}>arator - separator characters\
+            \n          \
+            \n              {lit}var{lit_reset}(iable)  - environment variable names\
+            \n              {lit}val{lit_reset}(ue)     - environment variable values\
+            \n              {lit}mat{lit_reset}(ched)   - highlighting for matched segments\
+            \n              {lit}unm{lit_reset}(atched) - dimming for unmatched lines\
+            \n              {lit}mis{lit_reset}(sing)   - indication for paths not found\
+            \n              {lit}spe{lit_reset}(cial)   - special characters\
+            \n              {lit}sep{lit_reset}(arator) - separator characters\
             \n          \
             \n          Color settings are colon-separated, key-value pairs in key=value form. \
                         Values are ANSI color codes.\
             \n          \
             \n          [default: {def}]\
-            \n\
+            \n  \
             \n  {lit}ENVY_SEP{lit_reset}\
-            \n          Overrides the OS specific path separators, which by default are:\
-            \n          Linux/MacOS:  {lit}ENVY_SEP={UNIX_DEFAULT_SEP}{lit_reset}\
-            \n          Windows:      {lit}ENVY_SEP={WINDOWS_DEFAULT_SEP}{lit_reset}",
+            \n          Override the OS specific path separators, which by default are:\
+            \n          \
+            \n              (Linux, MacOS)  {lit}ENVY_SEP={UNIX_DEFAULT_SEP}{lit_reset}\
+            \n              (Windows)       {lit}ENVY_SEP={WINDOWS_DEFAULT_SEP}{lit_reset}",
             cur = if let Ok(cur) = std::env::var("ENVY_COLORS") {
                 format!(" = {}", hi(&cur))
             } else {
