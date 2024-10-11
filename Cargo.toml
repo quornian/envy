@@ -1,11 +1,11 @@
 [package]
 name = "envy-cmd"
-version = "1.0.1"
+version = "1.0.2"
 description = "A command line tool for displaying environment variables in a human friendly form"
 authors = ["Ian Thompson <quornian@gmail.com>"]
 edition = "2021"
 license = "MIT"
-documentation = "https://github.com/quornian/envy/blob/v1.0.1/README.md"
+documentation = "https://github.com/quornian/envy/blob/v1.0.2/README.md"
 homepage = "https://github.com/quornian/envy"
 repository = "https://github.com/quornian/envy"
 default-run = "envy"
