@@ -1,6 +1,6 @@
 [package]
 name = "envy-cmd"
-version = "1.0.0"
+version = "1.0.1"
 description = "A command line tool for displaying environment variables in a human friendly form"
 authors = ["Ian Thompson <quornian@gmail.com>"]
 edition = "2021"

@@ -4,7 +4,7 @@ use clap::{builder::EnumValueParser, Arg, ArgAction, ColorChoice, Command};
 use glob_match::glob_match;
 use regex::{Regex, RegexBuilder};
 
-const VERSION: &'_ str = "1.0.0";
+const VERSION: &'_ str = "1.0.1";
 
 #[derive(Default)]
 struct Palette<'a> {
