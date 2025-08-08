@@ -71,48 +71,52 @@ fn main() {
             searching and comparison.",
         )
         .arg(Arg::new("pattern").help(
-            "The name or glob-like pattern of the environment variable(s) to show \
-            (use -r to switch to regular expressions). If omitted, all environment \
-            variables will be displayed.",
+            "Name(s) of environment variable(s) to show.\n\
+            May be a glob-like pattern or, used with -r, a regular expression.\n\
+            If omitted, all environment variables will be displayed.",
         ))
         .arg(
             Arg::new("use_regex")
+                .help_heading("Name Options")
                 .short('r')
                 .long("regex")
                 .action(ArgAction::SetTrue)
-                .help("Treat pattern as a regular expression to match against names."),
+                .help("Switch from glob-like to regular expressions when matching variable names."),
         )
         .arg(
             Arg::new("search")
+                .help_heading("Value Options")
                 .short('s')
                 .long("search")
                 .value_name("regex")
-                .help("Search the values of environment variables for the given pattern."),
+                .help("Search the values of variables for the given regular expression."),
         )
         .arg(
             Arg::new("only_matching")
+                .help_heading("Value Options")
                 .short('o')
                 .long("only-matching")
                 .action(ArgAction::SetTrue)
                 .requires("search")
                 .help(
-                    "After splitting values, elide unmatched lines and display only those that \
-                    match the regular expression given by --search.",
+                    "Display only lines that match the regular expression given by -s. \
+                    Other lines are elided.",
                 ),
+        )
+        .arg(
+            Arg::new("check_paths")
+                .help_heading("Value Options")
+                .short('e')
+                .long("exists")
+                .action(ArgAction::SetTrue)
+                .help("Indicate any lines that appear to be paths but cannot be found on disk."),
         )
         .arg(
             Arg::new("ignore_case")
                 .short('i')
                 .long("ignore-case")
                 .action(ArgAction::SetTrue)
-                .help("Make regular expression search and pattern match case insensitive."),
-        )
-        .arg(
-            Arg::new("check_paths")
-                .short('e')
-                .long("exists")
-                .action(ArgAction::SetTrue)
-                .help("Indicate any lines that appear to be paths but cannot be found on disk."),
+                .help("Make regular expressions case insensitive."),
         )
         .arg(
             Arg::new("color")
@@ -318,7 +322,7 @@ trait EnvHelp {
 
 impl EnvHelp for Command {
     fn env_help(self) -> Self {
-        // Add additional help for the environment variable ENVY_COLORS
+        // Add additional help section for environment variables
         let hdr = self.get_styles().get_header();
         let (hdr, hdr_reset) = (hdr.render(), hdr.render_reset());
         let lit = self.get_styles().get_literal();
@@ -326,7 +330,9 @@ impl EnvHelp for Command {
         let after_help = format!(
             "{hdr}Environment:{hdr_reset}\
             \n  {lit}ENVY_COLORS{lit_reset}  \
-            Override colors for different elements of the output.\n"
+            Override colors for different elements of the output.\
+            \n  {lit}ENVY_SEP{lit_reset}     \
+            Override path separator used to split values into lines.\n"
         );
         let hi = if std::io::stdout().is_terminal() {
             |s: &str| {
