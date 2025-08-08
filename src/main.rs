@@ -1,6 +1,6 @@
 use std::{borrow::Cow, collections::HashMap, io::IsTerminal};
 
-use clap::{builder::EnumValueParser, Arg, ArgAction, ColorChoice, Command};
+use clap::{builder::EnumValueParser, Arg, ArgAction, ArgGroup, ColorChoice, Command};
 use glob_match::glob_match;
 use regex::{Regex, RegexBuilder};
 
@@ -12,6 +12,7 @@ struct Palette<'a> {
     value: &'a str,
     matched: &'a str,
     unmatched: &'a str,
+    file: &'a str,
     missing: &'a str,
     special: &'a str,
     separator: &'a str,
@@ -23,8 +24,9 @@ const DEFAULT_COLORS: Palette<'_> = Palette {
     value: "",
     matched: "4;97",
     unmatched: "90",
+    file: "3;96",
     missing: "2;31",
-    special: "36",
+    special: "35",
     separator: "90",
     reset: "0",
 };
@@ -92,15 +94,26 @@ fn main() {
                 .help("Search the values of variables for the given regular expression."),
         )
         .arg(
+            Arg::new("find_file")
+                .help_heading("Value Options")
+                .short('f')
+                .long("find")
+                .value_name("filename")
+                .help(
+                    "Indicate which directories contain the given filename or glob-like pattern.",
+                ),
+        )
+        .group(ArgGroup::new("search_or_find").args(["search", "find_file"]))
+        .arg(
             Arg::new("only_matching")
                 .help_heading("Value Options")
                 .short('o')
                 .long("only-matching")
                 .action(ArgAction::SetTrue)
-                .requires("search")
+                .requires("search_or_find")
                 .help(
-                    "Display only lines that match the regular expression given by -s. \
-                    Other lines are elided.",
+                    "Display only lines that match the regular expression given by -s or contain \
+                    the file given by -f. Other lines are elided.",
                 ),
         )
         .arg(
@@ -158,6 +171,7 @@ fn main() {
     });
     let only_matching = matches.get_flag("only_matching");
     let check_paths = matches.get_flag("check_paths");
+    let find_file = matches.get_one::<String>("find_file").map(String::as_str);
     let use_color = match matches.get_one::<ColorChoice>("color").unwrap() {
         ColorChoice::Always => true,
         ColorChoice::Never => false,
@@ -193,6 +207,7 @@ fn main() {
             value: &var_or("val", DEFAULT_COLORS.value),
             matched: &var_or("mat", DEFAULT_COLORS.matched),
             unmatched: &var_or("unm", DEFAULT_COLORS.unmatched),
+            file: &var_or("fil", DEFAULT_COLORS.file),
             missing: &var_or("mis", DEFAULT_COLORS.missing),
             special: &var_or("spe", DEFAULT_COLORS.special),
             separator: &var_or("sep", DEFAULT_COLORS.separator),
@@ -226,6 +241,7 @@ fn main() {
         value: p_val,
         matched: p_mat,
         unmatched: p_unm,
+        file: p_fil,
         missing: p_mis,
         special: p_spe,
         separator: p_sep,
@@ -238,19 +254,25 @@ fn main() {
     for (env_key, env_value) in variables.into_iter() {
         // Deal with values first so we can reject the whole entry when a value search
         // matches none of the values
-        let mut any_match = value_search.is_none();
+        let mut any_match = value_search.is_none() && find_file.is_none();
         let has_paths_to_check = check_paths.then(|| env_value.contains(std::path::MAIN_SEPARATOR));
         let mut already_elided = false;
         let parts: Vec<_> = separator_re
             .captures_iter(&env_value)
             .filter_map(|capture| {
                 let (_, [part, sep]) = capture.extract();
-                let part_matched = value_search.as_ref().map(|search| search.is_match(part));
+                let find_matched =
+                    find_file.map(|subpath| std::path::Path::new(part).join(subpath).exists());
+                let part_matched = value_search
+                    .as_ref()
+                    .map(|search| search.is_match(part))
+                    .or(find_matched);
                 let part_missing =
                     has_paths_to_check.map(|check| check && !std::path::Path::new(part).exists());
                 any_match = any_match || part_matched.unwrap_or_default();
 
                 // Pre-format special character replacements here
+                // FIXME: --search may match and highlight these, breaking the escape sequences
                 let mut part = Cow::from(part);
                 for &(ch, repl) in SPECIALS.iter() {
                     // Replace always allocates a new string, so check first
@@ -289,6 +311,26 @@ fn main() {
                         }
                     };
                 }
+                part = if let Some(file) = find_file.as_ref() {
+                    if find_matched != Some(true) {
+                        if only_matching {
+                            if already_elided {
+                                return None;
+                            }
+                            already_elided = true;
+                            return Some((None, Some(false), Cow::from("..."), ""));
+                        }
+                        part
+                    } else {
+                        already_elided = false;
+                        Cow::from(format!(
+                            "{part}{p_spe}[{p_sep}{}{p_res}{p_fil}{file}{p_res}{p_spe}]",
+                            std::path::MAIN_SEPARATOR
+                        ))
+                    }
+                } else {
+                    part
+                };
 
                 Some((part_missing, part_matched, part, sep))
             })
@@ -354,6 +396,7 @@ impl EnvHelp for Command {
             \n              {lit}val{lit_reset}(ue)     - environment variable values\
             \n              {lit}mat{lit_reset}(ched)   - highlighting for matched segments\
             \n              {lit}unm{lit_reset}(atched) - dimming for unmatched lines\
+            \n              {lit}fil{lit_reset}(ename)  - indication for files found in directories\
             \n              {lit}mis{lit_reset}(sing)   - indication for paths not found\
             \n              {lit}spe{lit_reset}(cial)   - special characters\
             \n              {lit}sep{lit_reset}(arator) - separator characters\
@@ -379,6 +422,7 @@ impl EnvHelp for Command {
                     value,
                     matched,
                     unmatched,
+                    file,
                     missing,
                     special,
                     separator,
@@ -386,7 +430,7 @@ impl EnvHelp for Command {
                 } = DEFAULT_COLORS;
                 hi(&format!(
                     "var={variable}:val={value}:mat={matched}:unm={unmatched}:\
-                    mis={missing}:spe={special}:sep={separator}"
+                    fil={file}:mis={missing}:spe={special}:sep={separator}"
                 ))
             }
         );
