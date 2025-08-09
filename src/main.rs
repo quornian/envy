@@ -24,8 +24,8 @@ const DEFAULT_COLORS: Palette<'_> = Palette {
     value: "",
     matched: "4;97",
     unmatched: "90",
-    file: "3;96",
-    missing: "2;31",
+    file: "4;96",
+    missing: "9;2;31",
     special: "35",
     separator: "90",
     reset: "0",
@@ -324,7 +324,7 @@ fn main() {
                     } else {
                         already_elided = false;
                         Cow::from(format!(
-                            "{part}{p_spe}[{p_sep}{}{p_res}{p_fil}{file}{p_res}{p_spe}]",
+                            "{part}{p_sep}[{}{p_res}{p_fil}{file}{p_res}{p_sep}]",
                             std::path::MAIN_SEPARATOR
                         ))
                     }

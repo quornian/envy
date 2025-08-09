@@ -1,20 +1,79 @@
-Envy
-====
+# Envy
+
 A command line tool for displaying environment variables in a human friendly form.
 
 Variables may be selected by name, glob-like `pattern` or regular expression (`-r`).
 
-![Example displaying the PATH variable and a search for sbin](envy.png)
+<div style="display:flex; gap: 1em">
+<pre style="flex:1"><em><b>$</b></em> envy -os sbin PATH
+<b>PATH</b><span style="opacity:.3">=</span>
+  /home/ian/.cargo/bin<span style="opacity:.3">:</span>
+  /home/ian/.local/bin<span style="opacity:.3">:</span>
+  /home/ian/bin<span style="opacity:.3">:</span>
+  /usr/local/sbin<span style="opacity:.3">:</span>
+  /usr/local/bin<span style="opacity:.3">:</span>
+  /usr/sbin<span style="opacity:.3">:</span>
+  /usr/bin<span style="opacity:.3">:</span>
+  /sbin<span style="opacity:.3">:</span>
+  /bin<span style="opacity:.3">:</span>
+  /usr/games<span style="opacity:.3">:</span>
+  /usr/local/games
+</pre>
+<pre style="flex:1"><em><b>$</b></em> envy -s sbin PATH
+<b>PATH</b><span style="opacity:.3">=</span>
+  <span style="opacity:.3">/home/ian/.cargo/bin:</span>
+  <span style="opacity:.3">/home/ian/.local/bin:</span>
+  <span style="opacity:.3">/home/ian/bin:</span>
+  /usr/local/<u>sbin</u><span style="opacity:.3">:</span>
+  <span style="opacity:.3">/usr/local/bin:</span>
+  /usr/<u>sbin</u><span style="opacity:.3">:</span>
+  <span style="opacity:.3">/usr/bin:</span>
+  /<u>sbin</u><span style="opacity:.3">:</span>
+  <span style="opacity:.3">/bin:</span>
+  <span style="opacity:.3">/usr/games:</span>
+  <span style="opacity:.3">/usr/local/games
+</pre>
+<pre style="flex:1"><em><b>$</b></em> envy -os sbin PATH
+<b>PATH</b><span style="opacity:.3">=</span>
+  <span style="opacity:.3">...</span>
+  /usr/local/<u>sbin</u><span style="opacity:.3">:</span>
+  <span style="opacity:.3">...</span>
+  /usr/<u>sbin</u><span style="opacity:.3">:</span>
+  <span style="opacity:.3">...</span>
+  /<u>sbin</u><span style="opacity:.3">:</span>
+  <span style="opacity:.3">...</span>
+</pre></div>
+
+<pre><em><b>$</b></em> envy -e XDG*DIRS
+<b>XDG_CONFIG_DIRS</b><span style="opacity:.3">=</span>
+  <span style="color:#833">/etc/xdg/xdg-cinnamon</span><span style="opacity:.3">:</span>
+  /etc/xdg
+&nbsp;
+<b>XDG_DATA_DIRS</b><span style="opacity:.3">=</span>
+  /usr/share/cinnamon<span style="opacity:.3">:</span>
+  /usr/share/gnome<span style="opacity:.3">:</span>
+  <span style="color:#833">/home/ian/.local/share/flatpak/exports/share</span><span style="opacity:.3">:</span>
+  /var/lib/flatpak/exports/share<span style="opacity:.3">:</span>
+  /usr/local/share<span style="opacity:.3">:</span>
+  /usr/share</pre>
+
+<pre><em><b>$</b></em> envy -of hx
+<b>PATH</b><span style="opacity:.3">=</span>
+  /home/ian/.cargo/bin<span style="opacity:.3">[</span><span style="opacity:.3">/</span><u style="color:#6cc">hx</u><span style="opacity:.3">]:</span>
+  <span style="opacity:.3">...</span></pre>
 
 Variable values are split by the OS specific path separator onto separate lines. These lines can be further searched (`-s`) or checked for path existence (`-e`).
 
 ## Installation
+
 Download one of the pre-compiled [releases](https://github.com/quornian/envy/releases) for your operating system, or install via Cargo using:
+
 ```
 cargo install --locked envy-cmd
 ```
 
 ## Usage
+
 ```
 $ envy --help
 
